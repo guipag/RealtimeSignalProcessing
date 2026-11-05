@@ -52,13 +52,17 @@ qu'elles sont fournies, les méthodes d'accès aux attributs de la classe
 
 Un filtre numérique du second ordre est décrit par une fonction de transfert de la forme :
 
-$$H(z) = \frac{Y(z)}{X(z)} = \frac{b_0 + b_1 z^{-1} + b_2 z^{-2}}{1 + a_1 z^{-1} + a_2 z^{-2}}$$
+```math
+H(z) = \frac{Y(z)}{X(z)} = \frac{b_0 + b_1 z^{-1} + b_2 z^{-2}}{1 + a_1 z^{-1} + a_2 z^{-2}}
+```
 
 Les coefficients *b*₀, *b*₁, *b*₂ définissent la partie *numérateur* du filtre, tandis que *a*₁ et
 *a*₂ définissent sa partie *dénominateur*. En développant puis en revenant dans le domaine
 temporel, on obtient l'équation aux différences :
 
-$$y[n] = b_0 x[n] + b_1 x[n-1] + b_2 x[n-2] - a_1 y[n-1] - a_2 y[n-2]$$
+```math
+y[n] = b_0 x[n] + b_1 x[n-1] + b_2 x[n-2] - a_1 y[n-1] - a_2 y[n-2]
+```
 
 Cette formulation est directement exploitable pour programmer le filtre. Elle nécessite cependant
 de mémoriser les deux derniers échantillons d'entrée **et** les deux derniers échantillons de
@@ -70,13 +74,9 @@ variables d'état.
 La DF2T (*Direct Form II Transposed*) réalise exactement la même fonction de transfert, mais avec
 une structure différente. Elle utilise deux variables d'état, notées *z*₁ et *z*₂ :
 
-$$
-\begin{aligned}
-y[n] &= b_0 x[n] + z_1[n]\\
-z_1[n+1] &= b_1 x[n] - a_1 y[n] + z_2[n]\\
-z_2[n+1] &= b_2 x[n] - a_2 y[n]
-\end{aligned}
-$$
+```math
+\begin{aligned} y[n] &= b_0 x[n] + z_1[n]\\ z_1[n+1] &= b_1 x[n] - a_1 y[n] + z_2[n]\\ z_2[n+1] &= b_2 x[n] - a_2 y[n] \end{aligned}
+```
 
 Les deux variables *z*₁ et *z*₂ constituent la mémoire du filtre. Elles doivent donc être
 conservées d'un appel à l'autre de `update()` : elles ne doivent **surtout pas** être
@@ -111,7 +111,9 @@ Pour construire un filtre passe-bas ou passe-haut à partir de sa fréquence de 
 facteur de qualité *Q*, on peut utiliser les équations dites « cookbook » proposées par Robert
 Bristow-Johnson (RBJ). On commence par calculer la pulsation numérique :
 
-$$\omega_0 = 2\pi \frac{f_0}{F_s}, \qquad \alpha = \frac{\sin(\omega_0)}{2Q}$$
+```math
+\omega_0 = 2\pi \frac{f_0}{F_s}, \qquad \alpha = \frac{\sin(\omega_0)}{2Q}
+```
 
 où *f*₀ est la fréquence de coupure souhaitée et *F*ₛ la fréquence d'échantillonnage.
 
@@ -119,21 +121,23 @@ où *f*₀ est la fréquence de coupure souhaitée et *F*ₛ la fréquence d'éc
 
 | | | |
 |---|---|---|
-| $b_0' = \dfrac{1-\cos\omega_0}{2}$ | $b_1' = 1-\cos\omega_0$ | $b_2' = \dfrac{1-\cos\omega_0}{2}$ |
-| $a_0 = 1+\alpha$ | $a_1' = -2\cos\omega_0$ | $a_2' = 1-\alpha$ |
+| $`b_0' = \dfrac{1-\cos\omega_0}{2}`$ | $`b_1' = 1-\cos\omega_0`$ | $`b_2' = \dfrac{1-\cos\omega_0}{2}`$ |
+| $`a_0 = 1+\alpha`$ | $`a_1' = -2\cos\omega_0`$ | $`a_2' = 1-\alpha`$ |
 
 La fonction de transfert obtenue est alors :
 
-$$H(z) = \frac{b_0' + b_1' z^{-1} + b_2' z^{-2}}{a_0 + a_1' z^{-1} + a_2' z^{-2}}$$
+```math
+H(z) = \frac{b_0' + b_1' z^{-1} + b_2' z^{-2}}{a_0 + a_1' z^{-1} + a_2' z^{-2}}
+```
 
 Or la forme utilisée précédemment suppose que le premier coefficient du dénominateur vaut 1. Il
 faut donc **normaliser** tous les coefficients par *a*₀ :
 
 | | |
 |---|---|
-| $a_0 = 1$ | $b_0 = b_0'/a_0$ |
-| $a_1 = a_1'/a_0$ | $b_1 = b_1'/a_0$ |
-| $a_2 = a_2'/a_0$ | $b_2 = b_2'/a_0$ |
+| $`a_0 = 1`$ | $`b_0 = b_0'/a_0`$ |
+| $`a_1 = a_1'/a_0`$ | $`b_1 = b_1'/a_0`$ |
+| $`a_2 = a_2'/a_0`$ | $`b_2 = b_2'/a_0`$ |
 
 Cette normalisation est importante : les coefficients utilisés dans les équations DF2T doivent
 être ceux correspondant à une fonction de transfert dont le premier coefficient du dénominateur
@@ -141,10 +145,12 @@ vaut exactement 1.
 
 **Passe-haut** — seuls les coefficients du numérateur changent :
 
-$$b_0' = \frac{1+\cos\omega_0}{2}, \qquad b_1' = -(1+\cos\omega_0), \qquad b_2' = \frac{1+\cos\omega_0}{2}$$
+```math
+b_0' = \frac{1+\cos\omega_0}{2}, \qquad b_1' = -(1+\cos\omega_0), \qquad b_2' = \frac{1+\cos\omega_0}{2}
+```
 
 Les coefficients du dénominateur restent inchangés
-($a_0 = 1+\alpha$, $a_1' = -2\cos\omega_0$, $a_2' = 1-\alpha$), puis les cinq coefficients *b*₀,
+($`a_0 = 1+\alpha`$, $`a_1' = -2\cos\omega_0`$, $`a_2' = 1-\alpha`$), puis les cinq coefficients *b*₀,
 *b*₁, *b*₂, *a*₁ et *a*₂ sont à nouveau obtenus en les divisant par *a*₀.
 
 > **Quantification.** La librairie de base travaille en **virgule fixe** : l'arrondi des
