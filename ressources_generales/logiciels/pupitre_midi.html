@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pupitre MIDI — Teensy DSP</title>
+<style>
+  :root{
+    --bg:#0f1720; --panel:#17222e; --panel2:#1e2c3a; --line:#2b3d4f;
+    --txt:#e6edf3; --muted:#8aa0b4; --accent:#2dd4bf; --accent2:#38bdf8;
+    --warn:#f0ad4e; --bad:#ef6a6a; --good:#4ade80;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:radial-gradient(1200px 600px at 50% -10%, #16222f, var(--bg));
+    color:var(--txt); font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    padding:18px; min-height:100%;
+  }
+  h1{font-size:18px;margin:0 0 2px}
+  .sub{color:var(--muted);font-size:12.5px;margin-bottom:14px}
+  .bar{
+    display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:12px 14px;margin-bottom:16px;
+  }
+  .bar label{color:var(--muted);font-size:12px;margin-right:6px}
+  select,input[type=number],input[type=text]{
+    background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+    border-radius:8px;padding:6px 8px;font-size:13px;outline:none;
+  }
+  select:focus,input:focus{border-color:var(--accent2)}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--bad);margin-right:7px;vertical-align:middle}
+  .dot.on{background:var(--good);box-shadow:0 0 8px var(--good)}
+  button{
+    background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+    border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;
+  }
+  button:hover{border-color:var(--accent2)}
+  button.accent{background:linear-gradient(180deg,#155e63,#0f3f43);border-color:#1c7a80}
+  .grid{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));
+    gap:12px;margin-bottom:16px;
+  }
+  .strip{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:12px 10px 10px;display:flex;flex-direction:column;align-items:center;gap:8px;
+  }
+  .strip input.lbl{width:100%;text-align:center;font-weight:600;font-size:12.5px;padding:4px}
+  .val{font-variant-numeric:tabular-nums;font-weight:700;font-size:20px}
+  .map{color:var(--accent);font-size:12px;height:14px;font-variant-numeric:tabular-nums}
+  input[type=range].vert{
+    writing-mode:vertical-lr; direction:rtl; width:34px; height:190px; accent-color:var(--accent);
+    background:transparent; cursor:pointer;
+  }
+  .cc{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:11.5px}
+  .cc input{width:56px;text-align:center;padding:4px}
+  .toggles{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}
+  .tg{
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:120px;
+  }
+  .tg .row{display:flex;align-items:center;gap:6px}
+  .tg input.lbl{flex:1;padding:4px;text-align:center;font-size:12.5px}
+  .tg button{width:100%;font-weight:600}
+  .tg button.active{background:linear-gradient(180deg,#155e63,#0f3f43);border-color:var(--accent)}
+  .log{
+    background:#0b131b;border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+    height:120px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:#bcd;
+  }
+  .log div{white-space:pre}
+  .note{color:var(--muted);font-size:12px;margin-top:10px}
+  .warnbox{
+    background:#2a2110;border:1px solid #5a4a1e;color:#f3d79a;border-radius:10px;
+    padding:10px 12px;margin-bottom:16px;font-size:13px;display:none;
+  }
+  a{color:var(--accent2)}
+</style>
+</head>
+<body>
+  <h1>Pupitre MIDI — Teensy DSP temps réel</h1>
+  <div class="sub">Pilote les paramètres de tes effets (cutoff, Q, gain, mix…) par MIDI USB. Aucune installation : ouvre dans <b>Chrome</b> ou <b>Edge</b>.</div>
+
+  <div id="warn" class="warnbox"></div>
+
+  <div class="bar">
+    <span><span id="dot" class="dot"></span><span id="status">Web MIDI : non connecté</span></span>
+    <span><label>Sortie MIDI</label><select id="outSel"><option>—</option></select></span>
+    <span><label>Canal</label>
+      <select id="chSel"></select>
+    </span>
+    <span><label>Preset</label>
+      <select id="presetSel"></select>
+    </span>
+    <button id="connectBtn" class="accent">Connecter MIDI</button>
+    <button id="sendAllBtn">Renvoyer tout</button>
+  </div>
+
+  <div id="grid" class="grid"></div>
+
+  <div id="toggles" class="toggles"></div>
+
+  <div class="log" id="log"></div>
+  <div class="note">
+    Astuce : choisis le port <b>« Teensy MIDI/Audio »</b> comme sortie. Les faders envoient des
+    <b>Control Change</b> (0–127) en continu. La valeur physique affichée (Hz, dB, %…) suppose le
+    <b>même mapping</b> que le code Teensy du TP correspondant. Label et n° de CC sont éditables.
+  </div>
+
+<script>
+"use strict";
+
+// ---------- Presets : label, cc, et mapping d'affichage (log/lin) ----------
+// map: {type:'log'|'lin', min, max, unit}  -> valeur physique = f(v/127)
+//      {type:'steps', values:[...], unit}  -> sélecteur à n positions
+//      (0..127 découpé en n zones égales, comme midiStep() côté Teensy)
+const PRESETS = {
+  "Générique (CC 20–27)": [
+    {label:"CC 20", cc:20}, {label:"CC 21", cc:21}, {label:"CC 22", cc:22}, {label:"CC 23", cc:23},
+    {label:"CC 24", cc:24}, {label:"CC 25", cc:25}, {label:"CC 26", cc:26}, {label:"CC 27", cc:27},
+  ],
+  "TP2 — Gain": [
+    {label:"Gain",  cc:7,  map:{type:'lin', min:0,   max:4,   unit:"x"}},
+  ],
+  "TP3 — Biquad": [
+    {label:"Cutoff", cc:74, map:{type:'log', min:40,  max:20000, unit:"Hz"}},
+    {label:"Q",      cc:71, map:{type:'lin', min:0.5, max:10,    unit:""}},
+  ],
+  "A0 — Distorsion": [
+    {label:"Drive", cc:20, map:{type:'log', min:1, max:50,  unit:""}},
+    {label:"Level", cc:21, map:{type:'lin', min:0, max:100, unit:"%"}},
+    {label:"Mix",   cc:22, map:{type:'lin', min:0, max:100, unit:"%"}},
+  ],
+  "A1 — Suréchantillonnage": [
+    {label:"Drive",   cc:20, map:{type:'log',   min:1,   max:50,    unit:""}},
+    {label:"Level",   cc:21, map:{type:'lin',   min:0,   max:100,   unit:"%"}},
+    {label:"Mix",     cc:22, map:{type:'lin',   min:0,   max:100,   unit:"%"}},
+    {label:"Facteur L", cc:23, map:{type:'steps', values:[1, 2, 4], unit:"×"}},
+    {label:"Fréq. sinus", cc:24, map:{type:'log', min:200, max:10000, unit:"Hz"}},
+  ],
+  "A2 — Quantification / ΣΔ": [
+    {label:"Niveau",  cc:21, map:{type:'lin',   min:-60, max:0,     unit:"dBFS"}},
+    {label:"Fréq. sinus", cc:24, map:{type:'log', min:200, max:10000, unit:"Hz"}},
+    {label:"Bits B",  cc:25, map:{type:'steps', values:[2, 3, 4, 6, 8, 12, 16], unit:"bits"}},
+    {label:"Mise en forme", cc:26, map:{type:'steps', values:["ordre 0", "ordre 1", "ordre 2"], unit:""}},
+    {label:"CAN ΣΔ",  cc:27, map:{type:'steps', values:["arrêt", "ordre 1", "ordre 2"], unit:""}},
+    {label:"OSR",     cc:28, map:{type:'steps', values:[16, 32, 64], unit:""}},
+    {label:"Bande mesure", cc:29, map:{type:'log', min:1000, max:20000, unit:"Hz"}},
+  ],
+};
+
+// Boutons bascule associés à chaque preset (CC, envoi 0 / 127)
+const TOGGLE_PRESETS = {
+  "TP2 — Gain":        [{label:"Bypass", cc:80}, {label:"Mute", cc:81}],
+  "TP3 — Biquad":      [{label:"Passe-haut", cc:81}],
+  "A0 — Distorsion":           [{label:"Hard clip", cc:80}],
+  "A1 — Suréchantillonnage": [{label:"Hard clip", cc:80}, {label:"Source USB", cc:81}, {label:"Polyphase", cc:82}],
+  "A2 — Quantification / ΣΔ": [{label:"Source USB", cc:81}, {label:"Dither TPDF", cc:82}, {label:"Flux broche 2", cc:83}],
+};
+
+// ---------- État global ----------
+let midi = null, output = null;
+let channel = 1;
+let strips  = [];   // {label, cc, value, map}
+let toggles = [];   // {label, cc, on}
+
+// ---------- Utilitaires ----------
+const $ = s => document.querySelector(s);
+function log(msg){
+  const el = $("#log");
+  const d = document.createElement("div");
+  d.textContent = msg;
+  el.prepend(d);
+  while(el.childElementCount > 120) el.removeChild(el.lastChild);
+}
+function mapDisplay(m, v){
+  if(!m) return "";
+  if(m.type==='steps'){
+    const n = m.values.length;
+    const val = m.values[Math.min(Math.floor(v*n/128), n-1)];
+    return (String(val)+" "+(m.unit||"")).trim();
+  }
+  const t = v/127;
+  let x = (m.type==='log') ? m.min*Math.pow(m.max/m.min, t) : m.min + (m.max-m.min)*t;
+  let s;
+  if(m.unit==='Hz' && Math.abs(x)>=1000) s = (x/1000).toFixed(2)+" kHz";
+  else if(Math.abs(x)>=100) s = x.toFixed(0)+" "+m.unit;
+  else s = x.toFixed(2)+" "+m.unit;
+  return s.trim();
+}
+function sendCC(cc, value){
+  if(!output){ return; }
+  const status = 0xB0 | ((channel-1) & 0x0f);
+  output.send([status, cc & 0x7f, value & 0x7f]);
+  log(`CC ${cc} = ${value}   (ch ${channel})`);
+}
+
+// ---------- Rendu des faders ----------
+function buildStrips(){
+  const grid = $("#grid");
+  grid.innerHTML = "";
+  strips.forEach((s, i) => {
+    const strip = document.createElement("div");
+    strip.className = "strip";
+    strip.innerHTML = `
+      <input class="lbl" type="text" value="${s.label}">
+      <div class="map" id="map${i}">${mapDisplay(s.map, s.value)}</div>
+      <input class="vert" type="range" min="0" max="127" step="1" value="${s.value}">
+      <div class="val" id="val${i}">${s.value}</div>
+      <div class="cc">CC <input type="number" min="0" max="119" value="${s.cc}"></div>
+    `;
+    const lbl = strip.querySelector(".lbl");
+    const rng = strip.querySelector(".vert");
+    const ccIn = strip.querySelector(".cc input");
+    lbl.addEventListener("input", ()=> s.label = lbl.value);
+    ccIn.addEventListener("change", ()=> s.cc = Math.max(0, Math.min(119, parseInt(ccIn.value)||0)));
+    rng.addEventListener("input", ()=>{
+      s.value = parseInt(rng.value);
+      $("#val"+i).textContent = s.value;
+      $("#map"+i).textContent = mapDisplay(s.map, s.value);
+      sendCC(s.cc, s.value);
+    });
+    grid.appendChild(strip);
+  });
+}
+
+function buildToggles(){
+  const wrap = $("#toggles");
+  wrap.innerHTML = "";
+  toggles.forEach((t)=>{
+    const el = document.createElement("div");
+    el.className = "tg";
+    el.innerHTML = `
+      <div class="row"><input class="lbl" type="text" value="${t.label}">
+      <span class="cc">CC <input type="number" min="0" max="119" value="${t.cc}" style="width:52px"></span></div>
+      <button>${t.on ? "ON (127)" : "OFF (0)"}</button>
+    `;
+    const lbl = el.querySelector(".lbl");
+    const ccIn = el.querySelector(".cc input");
+    const btn = el.querySelector("button");
+    lbl.addEventListener("input", ()=> t.label = lbl.value);
+    ccIn.addEventListener("change", ()=> t.cc = Math.max(0, Math.min(119, parseInt(ccIn.value)||0)));
+    btn.addEventListener("click", ()=>{
+      t.on = !t.on;
+      btn.textContent = t.on ? "ON (127)" : "OFF (0)";
+      btn.classList.toggle("active", t.on);
+      sendCC(t.cc, t.on ? 127 : 0);
+    });
+    wrap.appendChild(el);
+  });
+}
+
+function loadPreset(name){
+  const def = PRESETS[name] || PRESETS["Générique (CC 20–27)"];
+  strips = def.map(d => ({label:d.label, cc:d.cc, value:0, map:d.map || null}));
+  buildStrips();
+  // Boutons bascule associés au TP (par défaut : jeu générique)
+  const tdef = TOGGLE_PRESETS[name] || [{label:"Bypass", cc:80}, {label:"Mode", cc:81}];
+  toggles = tdef.map(t => ({label:t.label, cc:t.cc, on:false}));
+  buildToggles();
+}
+
+function sendAll(){
+  strips.forEach(s => sendCC(s.cc, s.value));
+}
+
+// ---------- Web MIDI ----------
+function refreshOutputs(){
+  const sel = $("#outSel");
+  const prev = output ? output.id : null;
+  sel.innerHTML = "";
+  const outs = midi ? [...midi.outputs.values()] : [];
+  if(outs.length === 0){
+    sel.innerHTML = "<option>Aucune sortie</option>";
+    output = null; return;
+  }
+  outs.forEach(o=>{
+    const opt = document.createElement("option");
+    opt.value = o.id; opt.textContent = o.name;
+    sel.appendChild(opt);
+  });
+  // auto-sélection Teensy sinon 1er port
+  let pick = outs.find(o=>/teensy/i.test(o.name)) || outs.find(o=>o.id===prev) || outs[0];
+  sel.value = pick.id;
+  output = pick;
+}
+
+function setStatus(ok, msg){
+  $("#dot").classList.toggle("on", ok);
+  $("#status").textContent = msg;
+}
+
+async function connect(){
+  if(!navigator.requestMIDIAccess){
+    $("#warn").style.display = "block";
+    $("#warn").innerHTML = "Ton navigateur ne supporte pas le <b>Web MIDI API</b>. Utilise <b>Chrome</b> ou <b>Edge</b> (Safari et Firefox ne l'activent pas par défaut).";
+    setStatus(false, "Web MIDI indisponible");
+    return;
+  }
+  try{
+    midi = await navigator.requestMIDIAccess({sysex:false});
+    setStatus(true, "Web MIDI connecté");
+    refreshOutputs();
+    midi.onstatechange = ()=>{ refreshOutputs(); log("Changement de périphériques MIDI"); };
+    log("MIDI prêt. Sorties : " + [...midi.outputs.values()].map(o=>o.name).join(", ") || "aucune");
+  }catch(e){
+    setStatus(false, "Accès MIDI refusé");
+    $("#warn").style.display = "block";
+    $("#warn").textContent = "Accès MIDI refusé. Autorise le MIDI dans Chrome (icône dans la barre d'adresse) puis reclique « Connecter MIDI ».";
+  }
+}
+
+// ---------- Init ----------
+function init(){
+  // canal 1..16
+  const ch = $("#chSel");
+  for(let i=1;i<=16;i++){ const o=document.createElement("option"); o.value=i;o.textContent=i;ch.appendChild(o); }
+  ch.value = 1; ch.addEventListener("change", ()=> channel = parseInt(ch.value));
+  // presets
+  const ps = $("#presetSel");
+  Object.keys(PRESETS).forEach(n=>{ const o=document.createElement("option"); o.value=n;o.textContent=n;ps.appendChild(o); });
+  ps.value = "TP3 — Biquad";
+  ps.addEventListener("change", ()=> loadPreset(ps.value));
+  // sortie
+  $("#outSel").addEventListener("change", (e)=>{
+    if(!midi) return;
+    output = [...midi.outputs.values()].find(o=>o.id===e.target.value) || null;
+    if(output) log("Sortie sélectionnée : " + output.name);
+  });
+  $("#connectBtn").addEventListener("click", connect);
+  $("#sendAllBtn").addEventListener("click", sendAll);
+
+  loadPreset(ps.value);   // construit faders + boutons bascule
+  connect();              // tentative auto au chargement
+}
+document.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>
