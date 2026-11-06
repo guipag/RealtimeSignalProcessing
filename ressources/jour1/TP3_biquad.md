@@ -273,6 +273,7 @@ void AudioFilterBiquadManual::setLowpass(float freqHz, float Q) {
 > **Activité 3.** Envoyer un bruit ou un sweep en entrée, observer le spectre dans REW (ou
 > l'analyseur FFT). Vérifier que la coupure suit le fader et mesurer la pente. Quelle pente
 > attend-on pour un biquad du second ordre ?
+> Choisir un facteur de qualité Q grand (10), et régler le niveau d'entrée dans REW à -10 dBFs. Observez le spectre, allez aussi voir dans l'onglet distorsion. Que s'est-il passé ?
 
 ---
 
